@@ -198,9 +198,13 @@ def get_prompts_zh() -> dict:
 - 量化预期收益（如：每项措施对利润率贡献百分点）
 """,
 
+        # --- 第一次LLM调用的框架指令 ---
+        "llm_call1_framework_instruction": "用户希望在一个更广泛的分析框架下进行探索。这是他们选择的框架，请将其作为理解用户意图的背景参考：\n<analysis_framework_context>\n{active_analysis_framework_prompt}\n</analysis_framework_context>\n请注意：这个框架描述了用户可能希望达成的整体分析目标。\n然而，在当前这一步，你的核心任务是：\n1. 严格专注于用户接下来提出的【具体问题】。\n2. 根据这个【具体问题】，生成一个相关的、可执行的SQL查询，以获取支撑上述分析框架的数据。\n3. 严格遵循系统先前定义的指示，以JSON格式返回结果（主要期望 'sql_query'，同时可包含初步的 'chart_type', 'title', 'explanation', 'recommended_analyses' 等关键字段）。\n你的整个回复必须且只能是一个JSON对象字符串，不应包含任何JSON对象之外的文字、解释或标记。\n请不要试图在这一步完成分析框架中的所有内容或输出框架本身要求的复杂报告，此阶段重点是为后续分析步骤准备数据查询。",
+
         # --- 第二次LLM调用的指令片段 ---
         "llm_call2_user_query_prefix": "用户的原始查询或分析主题是：'{user_query_for_analysis}'",
         "llm_call2_framework_header": "【分析框架参考】\n用户先前选择了以下分析框架，请在解读数据和构建图表时参考此框架的目标和要求：",
+        "llm_call2_framework_guidance": "请严格按照上述分析框架的要求，结合下面的实际数据进行分析并撰写报告部分。",
         "llm_call2_general_guidance_header": "【通用分析指引】",
         "llm_call2_general_guidance_body": "请针对下方提供的实际数据，提供你的中文分析结果。",
         "llm_call2_data_header": "【实际查询数据】\n以下是根据用户先前请求查询得到的数据（Markdown格式）:",
