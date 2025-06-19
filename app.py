@@ -180,7 +180,9 @@ def process_user_query(user_query: str, current_df_data: pd.DataFrame, active_an
 
         with st.spinner(spinner_text_call1):
             llm_response_call1_data = get_llm_response_structured(
-                st.session_state.llm_conversation_history, FULL_SYSTEM_PROMPT,
+                st.session_state.llm_conversation_history,
+                FULL_SYSTEM_PROMPT,
+                PROMPTS,
                 active_analysis_framework_prompt=active_analysis_framework_prompt
             )
 

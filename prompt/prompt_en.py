@@ -198,9 +198,13 @@ Deconstruct the strategic proposition "How to improve the profit margin of the h
 - Quantify expected benefits (e.g., contribution of each measure to profit margin in percentage points).
 """,
 
+        # --- LLM Call 1 Framework Instruction ---
+        "llm_call1_framework_instruction": "The user wants to explore within a broader analysis framework. Here is the framework they selected; use it as context to understand the user's intent:\n<analysis_framework_context>\n{active_analysis_framework_prompt}\n</analysis_framework_context>\nNote: This framework describes the overall analysis goals the user may wish to achieve.\nHowever, for this step your main tasks are:\n1. Focus strictly on the user's specific question that follows.\n2. Generate a relevant, executable SQL query to obtain data supporting the above framework.\n3. Strictly follow the previously defined instructions and return the results in JSON format (expecting 'sql_query' and optionally 'chart_type', 'title', 'explanation', 'recommended_analyses').\nYour entire reply must be a single JSON object only, with no additional text or markup.\nDo not attempt to complete the entire framework analysis or produce the full report at this stage; the focus is preparing the query for later analysis.",
+
         # --- Prompt Fragments for LLM Call 2 ---
         "llm_call2_user_query_prefix": "The user's original query or analysis topic is: '{user_query_for_analysis}'",
         "llm_call2_framework_header": "【Analysis Framework Reference】\nThe user previously selected the following analysis framework. Please refer to its goals and requirements when interpreting the data and building the chart:",
+        "llm_call2_framework_guidance": "Please strictly follow the above framework requirements and combine them with the actual data below when producing your analysis.",
         "llm_call2_general_guidance_header": "【General Analysis Guidance】",
         "llm_call2_general_guidance_body": "Please provide your English analysis for the actual data provided below.",
         "llm_call2_data_header": "【Actual Queried Data】\nBelow is the data queried based on the user's previous request (in Markdown format):",

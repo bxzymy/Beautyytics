@@ -7,10 +7,12 @@ from openai import OpenAI, OpenAIError
 
 # DATA_ANALYSIS_PROMPT_TEMPLATE 和其他基础Prompt组件将由调用方 (app.py) 传入或在app.py中构建
 
-def get_llm_response_structured(conversation_history_for_llm: list,
-                                system_prompt_content: str,  # 通常是 FULL_SYSTEM_PROMPT (包含DB Schema和SQL生成规则)
-                                model_name: str = "qwen-plus",
-                                active_analysis_framework_prompt: str = None):
+def get_llm_response_structured(
+        conversation_history_for_llm: list,
+        system_prompt_content: str,  # 通常是 FULL_SYSTEM_PROMPT (包含DB Schema和SQL生成规则)
+        prompt_fragments: dict,
+        model_name: str = "qwen-plus",
+        active_analysis_framework_prompt: str = None):
     api_key = os.getenv("DASHSCOPE_API_KEY")
     if not api_key and hasattr(st, 'secrets') and "DASHSCOPE_API_KEY" in st.secrets:
         api_key = st.secrets["DASHSCOPE_API_KEY"]
@@ -29,19 +31,25 @@ def get_llm_response_structured(conversation_history_for_llm: list,
     ]
 
     if active_analysis_framework_prompt:
-        framework_instruction = (
-            "用户希望在一个更广泛的分析框架下进行探索。这是他们选择的框架，请将其作为理解用户意图的背景参考：\n"
-            "<analysis_framework_context>\n"
-            f"{active_analysis_framework_prompt}\n"
-            "</analysis_framework_context>\n"
-            "请注意：这个框架描述了用户可能希望达成的整体分析目标。\n"
-            "然而，在当前这一步，你的核心任务是：\n"
-            "1. 严格专注于用户接下来提出的【具体问题】。\n"
-            "2. 根据这个【具体问题】，生成一个相关的、可执行的SQL查询，以获取支撑上述分析框架的数据。\n"
-            "3. 严格遵循系统先前定义的指示，以JSON格式返回结果（主要期望 'sql_query'，同时可包含初步的 'chart_type', 'title', 'explanation', 'recommended_analyses' 等关键字段）。\n"
-            "你的整个回复必须且只能是一个JSON对象字符串，不应包含任何JSON对象之外的文字、解释或标记。\n"  # 强化指令
-            "请不要试图在这一步完成分析框架中的所有内容或输出框架本身要求的复杂报告，此阶段重点是为后续分析步骤准备数据查询。"
-        )
+        template = prompt_fragments.get("llm_call1_framework_instruction")
+        if template:
+            framework_instruction = template.format(
+                active_analysis_framework_prompt=active_analysis_framework_prompt
+            )
+        else:
+            framework_instruction = (
+                "用户希望在一个更广泛的分析框架下进行探索。这是他们选择的框架，请将其作为理解用户意图的背景参考：\n"
+                "<analysis_framework_context>\n"
+                f"{active_analysis_framework_prompt}\n"
+                "</analysis_framework_context>\n"
+                "请注意：这个框架描述了用户可能希望达成的整体分析目标。\n"
+                "然而，在当前这一步，你的核心任务是：\n"
+                "1. 严格专注于用户接下来提出的【具体问题】。\n"
+                "2. 根据这个【具体问题】，生成一个相关的、可执行的SQL查询，以获取支撑上述分析框架的数据。\n"
+                "3. 严格遵循系统先前定义的指示，以JSON格式返回结果（主要期望 'sql_query'，同时可包含初步的 'chart_type', 'title', 'explanation', 'recommended_analyses' 等关键字段）。\n"
+                "你的整个回复必须且只能是一个JSON对象字符串，不应包含任何JSON对象之外的文字、解释或标记。\n"
+                "请不要试图在这一步完成分析框架中的所有内容或输出框架本身要求的复杂报告，此阶段重点是为后续分析步骤准备数据查询。"
+            )
         messages_for_api.append({"role": "user", "content": framework_instruction})
 
     messages_for_api.extend(conversation_history_for_llm)
@@ -115,6 +123,8 @@ def get_llm_response_structured(conversation_history_for_llm: list,
 def get_final_analysis_and_chart_details(
         data_df: pd.DataFrame,
         user_query_for_analysis: str,
+        system_prompt_for_call2: str,
+        prompt_fragments: dict,
         active_analysis_framework_prompt: str = None,
         base_data_analysis_prompt_template: str = None,
         data_caveats_instructions: str = None,
@@ -137,6 +147,8 @@ def get_final_analysis_and_chart_details(
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
 
+    system_message_for_call2 = system_prompt_for_call2
+
     try:
         analysis_prefix = ""
         if data_df.shape[0] > 50:
@@ -158,15 +170,19 @@ def get_final_analysis_and_chart_details(
 
 
     prompt_sections = []
-    prompt_sections.append(f"用户的原始查询或分析主题是：'{user_query_for_analysis}'")
+    prompt_sections.append(
+        prompt_fragments.get("llm_call2_user_query_prefix", "用户的原始查询或分析主题是：'{user_query_for_analysis}'").format(
+            user_query_for_analysis=user_query_for_analysis)
+    )
 
     analysis_guidance_section = ""
     if active_analysis_framework_prompt:
         prompt_sections.append(
-            "【分析框架参考】\n用户先前选择了以下分析框架，请在解读数据和构建图表时参考此框架的目标和要求：\n"
+            f"{prompt_fragments.get('llm_call2_framework_header', '【分析框架参考】')}\n"
             f"<analysis_framework_context>\n{active_analysis_framework_prompt}\n</analysis_framework_context>"
         )
-        analysis_guidance_section = "请严格按照上述分析框架的要求，结合下面的实际数据进行分析并撰写报告部分。"
+        analysis_guidance_section = prompt_fragments.get("llm_call2_framework_guidance",
+                                                        "请严格按照上述分析框架的要求，结合下面的实际数据进行分析并撰写报告部分。")
     elif base_data_analysis_prompt_template:  # 通常是 prompt.DATA_ANALYSIS_PROMPT_TEMPLATE
         # 此处假设 base_data_analysis_prompt_template 包含了核心的通用分析引导文本
         # 并且不包含 {data_string} 或 {data_format} 占位符，因为数据会在下面专门提供
@@ -174,35 +190,33 @@ def get_final_analysis_and_chart_details(
         # 为简化，这里直接使用一个通用的分析引导文本，或者app.py应传入处理好的文本
         analysis_guidance_section = (
                 base_data_analysis_prompt_template.replace("{data_format}", "markdown table")
-                .replace("{data_string}", "")  # 移除数据占位符，数据单独提供
-                .replace("这是数据内容:", "")  # 清理模板中数据引入的引导语
-                .replace("请提供你的分析:", "").strip()  # 清理末尾的引导语
-                + "\n请针对下方提供的实际数据，提供你的中文分析结果。"
+                .replace("{data_string}", "")
+                .replace("这是数据内容:", "")
+                .replace("请提供你的分析:", "").strip()
+                + f"\n{prompt_fragments.get('llm_call2_general_guidance_body', '请针对下方提供的实际数据，提供你的中文分析结果。')}"
         )
-        prompt_sections.append(f"【通用分析指引】\n{analysis_guidance_section}")
+        prompt_sections.append(
+            f"{prompt_fragments.get('llm_call2_general_guidance_header', '【通用分析指引】')}\n{analysis_guidance_section}"
+        )
     else:
         prompt_sections.append(
-            "【通用分析指引】\n请针对下方提供的实际数据，提供一段简明的中文文本分析和解读，侧重于关键洞察、趋势或对业务用户有价值的发现。")
-
-    prompt_sections.append(f"【实际查询数据】\n以下是根据用户先前请求查询得到的数据（Markdown格式）:\n{data_string}")
+            f"{prompt_fragments.get('llm_call2_general_guidance_header', '【通用分析指引】')}\n"
+            f"{prompt_fragments.get('llm_call2_general_guidance_body', '请针对下方提供的实际数据，提供你的中文分析结果。')}"
+        )
+    prompt_sections.append(
+        f"{prompt_fragments.get('llm_call2_data_header', '【实际查询数据】')}\n{data_string}"
+    )
 
     if data_caveats_instructions:
-        prompt_sections.append(f"【数据检查与注意事项】\n{data_caveats_instructions}")
+        prompt_sections.append(
+            f"{prompt_fragments.get('llm_call2_caveats_header', '【数据检查与注意事项】')}\n{data_caveats_instructions}"
+        )
     else:
-        prompt_sections.append("【数据检查与注意事项】\n请仔细检查数据，留意潜在问题如地理名称不一致、缺失值或异常。")
-
+        prompt_sections.append(
+            f"{prompt_fragments.get('llm_call2_caveats_header', '【数据检查与注意事项】')}\n{prompt_fragments.get('llm_call2_caveats_body', '请仔细检查数据，留意潜在问题如地理名称不一致、缺失值或异常。')}"
+        )
     prompt_sections.append(
-        "【任务要求与输出格式】\n"
-        "1. **文本分析 (`analysis_text`)**: 根据上述指引和数据，提供详细的中文文本分析。\n"
-        "2. **最终图表建议**: 根据实际数据和分析，推荐最合适的图表类型，并提供以下参数作为JSON对象的顶层键：\n"  # 强调顶层键
-        "   - `chart_type`: (string) 推荐的图表类型（可选值：\"line\", \"bar\", \"pie\", \"scatter\", \"table\"）。\n"
-        "   - `x_axis`: (string, 可选) X轴的列名。\n"
-        "   - `y_axis`: (string or list of strings, 可选) Y轴的列名。\n"
-        "   - `category_column`: (string, 可选) 饼图的分类列名。\n"
-        "   - `value_column`: (string, 可选) 饼图的数值列名。\n"
-        "   - `title`: (string) 基于数据内容和分析的图表标题。\n"
-        "   - `explanation`: (string) 对图表所展示内容的解释，以及关键洞察，可结合数据注意事项。\n"
-        "请将所有结果严格封装在一个JSON对象中返回，确保所有上述图表参数键都在JSON的顶层。"
+        f"{prompt_fragments.get('llm_call2_task_header', '【任务要求与输出格式】')}\n{prompt_fragments.get('llm_call2_task_body')}"
     )
     user_content_for_call2 = "\n\n---\n\n".join(prompt_sections)
 
